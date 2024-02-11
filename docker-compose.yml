@@ -1,0 +1,52 @@
+version: '3.8'
+
+networks:
+  stan-network:
+    name: stan-network
+    driver: bridge
+
+services:
+  goservice:
+    restart: on-failure
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      - stan-network
+    ports:
+      - "4222:4222"
+      - "8000:8000"
+    depends_on:
+      - postgresql
+
+  postgresql:
+    networks:
+      - stan-network
+    restart: always
+    image: postgres:latest
+    volumes:
+      - ./.database/postgres/data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    ports:
+      - "5436:5432"
+
+  migrate:
+    image: migrate/migrate
+    restart: on-failure
+    networks:
+      - stan-network
+    volumes:
+      - ./schema:/migrations
+    command: [ "-path", "/migrations", "-database",  "postgres://${DB_USER}:${DB_PASSWORD}@postgresql:5432/${DB_NAME}?sslmode=disable", "up"]
+    links:
+      - postgresql
+
+  nats_streaming:
+    networks:
+      - stan-network
+    image: nats-streaming:latest
+    ports:
+      - "4223:4222"
